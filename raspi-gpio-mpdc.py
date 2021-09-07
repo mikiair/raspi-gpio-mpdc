@@ -3,8 +3,8 @@
 __author__ = "Michael Heise"
 __copyright__ = "Copyright (C) 2021 by Michael Heise"
 __license__ = "Apache License Version 2.0"
-__version__ = "0.0.1"
-__date__ = "07/14/2021"
+__version__ = "0.0.2"
+__date__ = "09/07/2021"
 
 """MPD/Mopidy client which is controlled by GPIO Zero on Raspberry Pi
 """
@@ -29,36 +29,50 @@ import sys
 import weakref
 import signal
 import logging
-from systemd.journal import JournalHandler
 
 # 3rd party imports
 import gpiozero
+from systemd.journal import JournalHandler
+from mpd import MPDClient
 
 # local imports
 # - none -
 
 
 class RaspiGPIOMPDClient:
+    CONFIGFILE = "/etc/raspi-gpio-mpdc.conf"
+
+    VALUES_PULLUPDN = ["up", "dn", "upex", "dnex"]
+    VALUES_PRESSRELEASE = ["press", "release"]
+    VALUES_TRIGGERED_EVENTS = [
+        "none",
+        "play_stop",
+        "play_pause",
+        "prev_track",
+        "next_track",
+        "mute",
+        "vol_dn",
+        "vol_up",
+        "prev_src",
+        "next_src",
+    ]
+
+    PUD_SWITCHER = {
+        0: (True, None),
+        1: (False, None),
+        2: (None, False),
+        3: (None, True),
+    }
+
     def __init__(self):
         self._finalizer = weakref.finalize(self, self.finalize)
 
         self.isValidGPIO = False
-        self.CONFIGFILE = "/etc/raspi-gpio-mpdc.conf"
-
-        self.valuesPull = ["up", "dn", "upex", "dnex"]
-        self.valuesPressRelease = ["press", "release"]
-        self.valuesTriggeredEvents = [
-            "play_pause",
-            "play_stop",
-            "next",
-            "prev",
-            "mute",
-            "vol_dn",
-            "vol_up",
-        ]
 
         self.config = None
         self.mpd = None
+        
+        self.btn_held = {}
 
     def remove(self):
         self._finalizer()
@@ -98,53 +112,61 @@ class RaspiGPIOMPDClient:
 
     def initMPD(self):
         """establish the connection to MPD server"""
-        from mpd import MPDClient
+        try:
+            self._log.info("Connect to MPD.")
+            configMPD = self.config["MPD"]
 
-        self._log.info("Connect to MPD.")
-        configMPD = self.config["MPD"]
+            if not configMPD:
+                host = "localhost"
+            else:
+                host = configMPD["mpdhost"]
 
-        if not configMPD:
-            host = "localhost"
-        else:
-            host = configMPD["mpdhost"]
-
-        self.mpd = MPDClient()
-        self.mpd.timeout = 10
-        self.mpd.idletimeout = None
-        self.mpd.connect(host, 6600)
-        self.mpd.close()
-        self.mpd.disconnect()
+            self.mpd = MPDClient()
+            self.mpd.timeout = 10
+            self.mpd.idletimeout = None
+            self.mpd.connect(host, 6600)
+            self.mpd.close()
+            self.mpd.disconnect()
+        except Exception as e:
+            self._log.error(f"Connection to MPD failed! ({e})")
 
     def configButton(self, buttonConfig):
-        pudStr = buttonConfig[1].lower()
-        if not self.checkResistor(pudStr):
+        """configure one button"""
+        pudMode = checkResistor(buttonConfig[1])
+        if pudMode == -1:
             return False
 
-        pud = None
-        active = None
-        if len(pudStr)==2:
-            pud = True if pudStr == "up" else False
-        else:
-            active = True if pudStr == "dnex" else False
+        try:
+            pud, active = self.PUD_SWITCHER[pudMode]
+        except Exception as e:
+            self._log.error(f"Could not convert pull resistor configuration! ({e})")
+            return False
 
-        eventStr = buttonConfig[2].lower()
+        eventStr = buttonConfig[2]
         if not self.checkButtonEvent(eventStr):
             return False
 
         event = True if eventStr == "press" else False
-        
-        try:
-            if len(buttonConfig) == 5:
-                bouncetime = int(buttonConfig[4])
-            else:
-                bouncetime = 100
-        except:
-            self._log.error("Invalid bounce time! (only integer >0 allowed)")
-            return false
 
-        return setupButton(buttonConfig[0], pud, active, event, triggered_event, bouncetime)
-    
+        triggered_event = buttonConfig[3]
+        if not checkTriggeredEvent(triggered_event):
+            return False
+
+        if len(buttonConfig) == 5:
+            try:
+                bouncetime = int(buttonConfig[4])
+            except:
+                self._log.error("Invalid bounce time! (only integer >0 allowed)")
+                return False
+        else:
+            bouncetime = 100
+
+        return setupButton(
+            buttonConfig[0], pud, active, event, triggered_event, bouncetime
+        )
+
     def setupButton(self, pin, pull, active, event, triggered_event):
+        """setup GPIOZero object for button"""
         try:
             button = gpiozero.Button(
                 int(pin),
@@ -152,44 +174,58 @@ class RaspiGPIOMPDClient:
                 active_state=active,
                 bounce_time=0.001 * bouncetime,
             )
+            event_func = getattr(self, triggered_event)
             if event:
-                button.when_pressed = triggered_event
+                button.when_pressed = event_func
             else:
-                button.when_released = triggered_event
-            return true
-        except:
-            self._log.error("Error while setting up GPIO input for button!")
+                button.when_released = event_func
+            return True
+        except Except as e:
+            self._log.error("Error while setting up GPIO input for button! ({e})")
             return False
-    
+
     def configRotEnc(self, rotencConfig):
+        """Configure one rotary encoder"""
         pass
-    
+
     def setupRotEnc(self, pinA, pinB, pull, triggered_ccw_event, triggered_cw_event):
+        """Setup GPIOZero rotary encoder object"""
         pass
-    
+
     def checkResistor(self, pudStr):
-        if not pudStr in self.valuesPull:
+        """Return index if string is found in pre-defined values for pull resistor types"""
+        try:
+            return self.VALUES_PULLUPDNUPDN.index(pudStr)
+        except:
             self._log.error(
-                "Invalid resistor configuration! Only one of {0} allowed!".format(self.valuesPull.join("/"))
+                "Invalid resistor configuration! Only one of {0} allowed!".format(
+                    self.VALUES_PULLUPDNUPDN.join("/")
+                )
             )
-            return False
-        return True
-    
+            return -1
+
     def checkButtonEvent(self, buttonEvent):
-        if not buttonEvent in self.valuesPressRelease:
+        """Return if string is in pre-defined values for button events"""
+        if not buttonEvent in self.VALUES_PRESSRELEASE:
             self._log.error(
                 "Invalid event configuration! Only 'PRESS' or 'RELEASE' allowed!"
             )
             return False
         return True
-    
+
     def checkTriggeredEvent(self, triggeredEvent):
-        pass
-    
+        """Return true if string..."""
+        if not triggeredEvent in self.VALUES_TRIGGERED_EVENTS:
+            self._log.error(
+                "Invalid event! Only one of {0} allowed!".format(
+                    self.VALUES_TRIGGERED_EVENTS.join("/")
+                )
+            )
+            return False
+        return True
+
     def initGPIO(self):
-        """evaluate the data read from config file to
-        set the GPIO inputs
-        """
+        """evaluate the data read from config file to set the GPIO inputs"""
         self._log.info("Init GPIO configuration.")
         configGPIO = self.config["GPIO"]
 
@@ -198,24 +234,27 @@ class RaspiGPIOMPDClient:
         for key, value in configGPIO:
             if key.starts_with("Button"):
                 self._log.info(f"Button configuration '{key} = {value}'")
-                if not self.configButton(value.split(",")):
-                    return false
+                if not self.configButton(value.lower().split(",")):
+                    return False
                 continue
 
             if key.starts_with("RotEnc"):
                 self._log.info(f"RotEnc configuration '{key} = {value}'")
-                if not self.configRotEnc(value.split(",")):
-                    return false
+                if not self.configRotEnc(value.lower().split(",")):
+                    return False
                 continue
 
             self._log.info(f"Invalid key '{key}'!")
-            return false
+            return False
 
         self.isValidGPIO = True
         return True
 
     # trigger event handlers
 
+    def none(self):
+        pass
+    
     def play_pause(self):
         if self.mpd.status()["state"] == "play":
             self.mpd.pause()
@@ -243,6 +282,11 @@ class RaspiGPIOMPDClient:
     def vol_up(self):
         self.mpd.volue(+self._vol_step)
 
+    def prev_src(self):
+        pass
+    
+    def next_src(self):
+        pass
 
 def sigterm_handler(_signo, _stack_frame):
     """clean exit on SIGTERM signal (when systemd stops the process)"""
