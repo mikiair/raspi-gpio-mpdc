@@ -1,0 +1,2 @@
+# force LF line ending for all files to enable cross-platform exchangability
+* eol=lf
