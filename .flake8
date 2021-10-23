@@ -1,0 +1,33 @@
+[flake8]
+# use black matched line length
+max-line-length = 88
+
+# Set the maximum allowed McCabe complexity value for a block of code.
+max-complexity = 10
+
+# output file seems ignored in config file...
+output-file = .flake8_results
+tee = true
+
+select =
+    # Regular flake8 rules
+    C, E, F, W
+    # flake8-bugbear rules
+    B
+    # B950: line too long (soft speed limit)
+    B950
+    # flake8-isort
+    I
+    # pep8-naming rules
+    N
+ignore =
+    # E203: whitespace before ':' (not PEP8 compliant)
+    E203
+    # E501: line too long (replaced by B950)
+    E501
+    # E722: do not use bare 'except' (replaced by B001)
+    E722
+    # W503: line break before binary operator (not PEP8 compliant)
+    W503
+    # B305: .next() is not a thing on Python 3 (used by playback controller)
+    B305
