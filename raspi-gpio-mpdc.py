@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 __author__ = "Michael Heise"
-__copyright__ = "Copyright (C) 2021 by Michael Heise"
+__copyright__ = "Copyright (C) 2022 by Michael Heise"
 __license__ = "Apache License Version 2.0"
 __version__ = "0.0.3"
 __date__ = "06/19/2022"
