@@ -12,8 +12,8 @@ Required packages
 * `Mopidy <https://mopidy.com/>`_ with `Mopidy-MPD <https://mopidy.com/ext/mpd>`_ extension (or another MPD server)
 * pigpiod (or any other supported pin factory library)
 * GPIO Zero
-* python-mpd2
 * python3-systemd
+* python3-mpd / python-mpd2
 
 Installation
 ------------
@@ -32,15 +32,20 @@ Automated installation is not yet supported. Follow the manual steps below inste
 
    ``sudo apt install python3-systemd``
 
+#. Install python3-mpd package
+   - Debian Bullseye
+
+   ``sudo apt install python3-mpd``
+
+   - Other
+   
+   ``pip install python-mpd2``   
+
 #. If not already included, add the *pi* user to the *gpio* group (check with ``groups pi`` command)
 
    ``sudo usermod -a -G gpio mopidy``
    
-#. Install python-mpd2 package
-
-   ``pip install python-mpd2``
-
-#. Download raspi-gpio-mpdc **Code** button or from `Releases <https://github.com/mikiair/raspi-gpio-mpdc/releases>`_ 
+#. Download raspi-gpio-mpdc **Code** or from `Releases <https://github.com/mikiair/raspi-gpio-mpdc/releases>`_ 
    page (you most likely did this already).
 
 #. Unzip the received file:
