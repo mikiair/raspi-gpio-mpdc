@@ -60,32 +60,37 @@ class PersistentMPDClient(mpd.MPDClient):
         then read out the command list and dereference to auto-connect commands
         """
         try:
+            if self.log is not None:
+                self.log.debug("establish_connection")
+
             if not self.do_connect(False):
                 return
 
             if not self.connection_established:
-                # get list of available commands from client
-                command_list = self.commands()
-
-                # wrap all valid MPDClient functions
-                # in a ping-connection-retry wrapper
-                for cmd in command_list:
-                    if cmd not in self.command_blacklist:
-                        if hasattr(super(PersistentMPDClient, self), cmd):
-                            super_func = super(
-                                PersistentMPDClient, self
-                            ).__getattribute__(cmd)
-                            new_func = self.try_cmd(super_func)
-                            setattr(self, cmd, new_func)
-                        else:
-                            if self.log is not None:
-                                self.log.debug("Unknown command attribute '{cmd}'!")
-                            pass
-
-                self.connection_established = True
+                self.establish_commandlist()
         except Exception as e:
             if self.log is not None:
                 self.log.error(f"Error when establishing connection to MPD server: {e}")
+
+    def establish_commandlist(self):
+        """Wrap all valid MPDClient functions so that each may reconnect to server."""
+        # get list of available commands from client
+        command_list = self.commands()
+
+        # wrap all valid MPDClient functions
+        # in a ping-connection-retry wrapper
+        for cmd in command_list:
+            if cmd not in self.command_blacklist:
+                if hasattr(super(PersistentMPDClient, self), cmd):
+                    super_func = super(PersistentMPDClient, self).__getattribute__(cmd)
+                    new_func = self.try_cmd(super_func)
+                    setattr(self, cmd, new_func)
+                else:
+                    if self.log is not None:
+                        self.log.debug("Unknown command attribute '{cmd}'!")
+                    pass
+
+        self.connection_established = True
 
     # create a wrapper for a function (such as an MPDClient
     # member function) that will verify a connection (and
@@ -197,8 +202,8 @@ class RaspiGPIOMPDClient:
         logHandler = JournalHandler()
         logHandler.setFormatter(log_fmt)
         log.addHandler(logHandler)
-        # log.setLevel(logging.INFO)
-        log.setLevel(logging.DEBUG)
+        log.setLevel(logging.INFO)
+        #log.setLevel(logging.DEBUG)
         self._log = log
         self._log.info("Initialized logging.")
 
@@ -208,7 +213,7 @@ class RaspiGPIOMPDClient:
     def readConfigFile(self):
         """Read the config file"""
         try:
-            self._log.info(f"Reading configuration file... '{self.CONFIGFILE}")
+            self._log.info(f"Reading configuration file... '{self.CONFIGFILE}'")
             self.config = configparser.ConfigParser()
             self.config.read(self.CONFIGFILE)
             return True
@@ -274,7 +279,7 @@ class RaspiGPIOMPDClient:
             "Wait until MPD server started and try establishing connection..."
         )
         num_tried = 0
-        while not self.isConnected and num_tried < 2 * self.mpd_conn_timeout:
+        while (not self.isConnected) and (num_tried < self.mpd_conn_timeout):
             try:
                 self.mpd.establish_connection()
                 self.isConnected = self.mpd.connection_established
@@ -284,12 +289,12 @@ class RaspiGPIOMPDClient:
             except Exception:
                 pass
             num_tried += 1
-            time.sleep(500)
+            time.sleep(1)
 
         return False
 
     def configButton(self, buttonConfig):
-        """configure one button"""
+        """Configure one button"""
         pudMode = self.checkResistor(buttonConfig[1])
         if pudMode == -1:
             return False
@@ -452,7 +457,7 @@ class RaspiGPIOMPDClient:
         self._log.info("Init GPIO configuration.")
         configGPIO = self.config["GPIO"]
 
-        self._vol_step = 5
+        self._vol_step = 1
 
         for key, value in configGPIO.items():
             if key.startswith("button"):
@@ -575,10 +580,9 @@ def main():
             log.error("Init MPD connection failed!")
             sys.exit(-4)
 
-        if not mpdclient.isConnected:
-            if not mpdclient.connectMPD():
-                log.error("Could not connect to MPD server - possibly timed out!")
-                sys.exit(-5)
+        if not mpdclient.isConnected and not mpdclient.connectMPD():
+            log.error("Could not connect to MPD server - possibly timed out!")
+            sys.exit(-5)
 
         log.info("Enter raspi-gpio-mpdc service loop...")
         while True:

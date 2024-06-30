@@ -99,14 +99,16 @@ where N is replaced by an integer number.
   
      * play_pause - toggle playback state between *play* and *pause*
      * play_stop - toggle playback state between *play* and *stop*
-     * prev - select previous track
-     * next - select next track
+     * prev_track - select previous track
+     * next_track - select next track
      * mute - toggle output state between *mute* and *unmute*
      * vol_up - increase output volume
      * vol_dn - decrease output volume
+     * prev_src - switch to the previous source
+     * next_src - switch to the next source
   
    ``bouncetime_ms``
-     (*optional*) Defines the time in milliseconds during which subsequent button events will be ignored. Default is 100ms.
+     (*optional*) Defines the time in milliseconds during which subsequent button events will be ignored. Default is 50ms.
 
    e.g.
 
@@ -116,7 +118,7 @@ where N is replaced by an integer number.
 
 #) The ``RotEncN`` key-value-pairs must be created based on this pattern:
 
-   ``RotEncN = input_pin_A,input_pin_B,up|dn|upex|dnex,rot_ccw_event,rot_cw_event``
+   ``RotEncN = input_pin_A,input_pin_B,up|dn|upex|dnex,rot_ccw_event,rot_cw_event[,bouncetime_ms]``
 
    ``input_pin_A,input_pin_B``
      The pair of GPIO pins to which a rotary encoder is connected. The sequence of high-low-high transitions determines the rotation direction. (Remaining pins are usually connected to *VCC*, *GND*, and an optional button switch.)
@@ -126,6 +128,8 @@ where N is replaced by an integer number.
      The event to trigger when the rotary encoder is turned counter-clockwise. Same as for buttons.
    ``rot_cw_event``
      The event to trigger when the rotary encoder is turned clockwise. Same as for buttons.
+   ``bouncetime_ms``
+     (*optional*) Defines the time in milliseconds during which subsequent encoder events will be ignored. Default is 20ms.
      
    e.g.
    
