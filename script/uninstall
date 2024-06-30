@@ -1,0 +1,27 @@
+#!/bin/bash
+
+set -e
+
+cd "$(dirname "$0")/.."
+
+echo "Stopping raspi-gpio-mpdc service..."
+
+sudo systemctl stop raspi-gpio-mpdc
+sudo systemctl disable raspi-gpio-mpdc
+
+echo "Removing raspi-gpio-mpdc service..."
+
+sudo rm -rf /lib/systemd/system/raspi-gpio-mpdc.service
+sudo rm -rf /usr/local/bin/raspi-gpio-mpdc.py
+
+if [ -e /etc/raspi-gpio-mpdc.conf ]
+  then
+    read -p "Delete '/etc/raspi-gpio-mpdc.conf' configuration file? (y/N)" delfile
+    if [ "$delfile" == "y" -o "$delfile" == "Y" ]
+      then
+        echo "Deleting configuration file."
+        sudo rm -rf /etc/raspi-gpio-mpdc.conf
+    fi
+fi
+
+echo "raspi-gpio-mpdc service uninstalled."

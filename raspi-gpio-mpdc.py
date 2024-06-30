@@ -1,15 +1,15 @@
 #!/usr/bin/env python
 
 __author__ = "Michael Heise"
-__copyright__ = "Copyright (C) 2022 by Michael Heise"
+__copyright__ = "Copyright (C) 2022-2024 by Michael Heise"
 __license__ = "Apache License Version 2.0"
-__version__ = "0.0.3"
-__date__ = "06/19/2022"
+__version__ = "0.0.4"
+__date__ = "06/30/2024"
 
 """MPD/Mopidy client which is controlled by GPIO Zero on Raspberry Pi
 """
 
-#    Copyright 2022 Michael Heise (mikiair)
+#    Copyright 2022-2024 Michael Heise (mikiair)
 #
 #    Licensed under the Apache License, Version 2.0 (the "License");
 #    you may not use this file except in compliance with the License.
@@ -60,7 +60,8 @@ class PersistentMPDClient(mpd.MPDClient):
         then read out the command list and dereference to auto-connect commands
         """
         try:
-            self.do_connect()
+            if not self.do_connect(False):
+                return
 
             if not self.connection_established:
                 # get list of available commands from client
@@ -110,7 +111,7 @@ class PersistentMPDClient(mpd.MPDClient):
         return func
 
     # needs a name that does not collide with parent connect() function
-    def do_connect(self):
+    def do_connect(self, log_exception=True):
         try:
             try:
                 # Attempting to disconnect
@@ -134,9 +135,11 @@ class PersistentMPDClient(mpd.MPDClient):
                 self.connect(self.socket, None)
             else:
                 self.connect(self.host, self.port)
+            return True
         except socket.error:
-            if self.log is not None:
+            if self.log is not None and log_exception:
                 self.log.error("MPD Server: connection refused!")
+            return False
 
 
 class RaspiGPIOMPDClient:
@@ -234,10 +237,20 @@ class RaspiGPIOMPDClient:
             ):
                 port = 6600
             else:
-                port = configMPD["mpdport"]
+                port = int(configMPD["mpdport"])
+
+            if (
+                not configMPD
+                or "timeout" not in configMPD
+                or configMPD["timeout"] == ""
+            ):
+                self.mpd_conn_timeout = 60
+            else:
+                self.mpd_conn_timeout = int(configMPD["timeout"])
 
             self._log.info(f"Initialize connection to MPD server: {host}:{port}")
 
+            # this will initially try to establish connection already
             self.mpd = PersistentMPDClient(host=host, port=port, log=self._log)
 
             self.isConnected = self.mpd.connection_established
@@ -251,15 +264,17 @@ class RaspiGPIOMPDClient:
             return False
 
     def connectMPD(self):
-        """Try connecting to MPD server up to 50 times (10 seconds)
+        """Try connecting to MPD server until timeout (configurable),
         to establish auto-reconnect commands.
         """
         if not self.mpd:
             return False
 
-        self._log.info("Wait until MPD server started and try establishing connection.")
+        self._log.info(
+            "Wait until MPD server started and try establishing connection..."
+        )
         num_tried = 0
-        while not self.isConnected and num_tried < 50:
+        while not self.isConnected and num_tried < 2 * self.mpd_conn_timeout:
             try:
                 self.mpd.establish_connection()
                 self.isConnected = self.mpd.connection_established
@@ -269,7 +284,7 @@ class RaspiGPIOMPDClient:
             except Exception:
                 pass
             num_tried += 1
-            time.sleep(200)
+            time.sleep(500)
 
         return False
 
@@ -302,7 +317,7 @@ class RaspiGPIOMPDClient:
                 self._log.error("Invalid bounce time! (only integer >0 allowed)")
                 return False
         else:
-            bouncetime = 100
+            bouncetime = 50
 
         return self.setupButton(
             buttonConfig[0], pud, active, event, triggered_event, bouncetime
@@ -361,7 +376,7 @@ class RaspiGPIOMPDClient:
                 self._log.error("Invalid bounce time! (only integer >0 allowed)")
                 return False
         else:
-            bouncetime = 100
+            bouncetime = 20
 
         return self.setupRotEnc(
             rotencConfig[0],
@@ -518,6 +533,9 @@ class RaspiGPIOMPDClient:
             self._log.debug(str(prev_vol))
 
     def prev_src(self):
+        # .listplaylists()
+        # .load(name)
+        # .list("file")
         pass
 
     def next_src(self):
@@ -559,9 +577,7 @@ def main():
 
         if not mpdclient.isConnected:
             if not mpdclient.connectMPD():
-                log.error(
-                    "Could not connect to MPD server - timed out after 50 attempts!"
-                )
+                log.error("Could not connect to MPD server - possibly timed out!")
                 sys.exit(-5)
 
         log.info("Enter raspi-gpio-mpdc service loop...")

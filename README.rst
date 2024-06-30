@@ -33,6 +33,7 @@ Automated installation is not yet supported. Follow the manual steps below inste
    ``sudo apt install python3-systemd``
 
 #. Install python3-mpd package
+
    - Debian Bullseye
 
    ``sudo apt install python3-mpd``

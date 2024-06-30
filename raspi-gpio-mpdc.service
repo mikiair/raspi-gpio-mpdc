@@ -1,4 +1,4 @@
-#    Copyright 2022 Michael Heise (mikiair)
+#    Copyright 2022-2024 Michael Heise (mikiair)
 # 
 #    Licensed under the Apache License, Version 2.0 (the "License");
 #    you may not use this file except in compliance with the License.
@@ -15,6 +15,8 @@
 [Unit]
 Description = GPIO Mopidy/MPD Client
 After = multi-user.target
+After = mopidy.service
+Wants = mopidy.service
 AssertFileNotEmpty=/etc/raspi-gpio-mpdc.conf
 
 [Service]
