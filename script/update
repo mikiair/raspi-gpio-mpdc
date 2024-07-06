@@ -27,7 +27,9 @@ sudo chmod +x /usr/local/bin/raspi-gpio-mpdc.py
 sudo cp -u raspi-gpio-mpdc.service /lib/systemd/system
 
 echo "Restarting raspi-gpio-mpdc service..."
+sudo systemctl daemon-reload
 sudo systemctl start raspi-gpio-mpdc
+sleep 3
 systemctl status raspi-gpio-mpdc
 
 echo "raspi-gpio-mpdc service updated."

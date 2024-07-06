@@ -42,9 +42,6 @@ from persistentmpdc import PersistentMPDClient
 class RaspiGPIOMPDClient:
     CONFIGFILE = "/etc/raspi-gpio-mpdc.conf"
 
-    LOGLEVEL_INFO = 0
-    LOGLEVEL_DEBUG = 1
-
     VALUES_PULLUPDN = ["up", "dn", "upex", "dnex"]
     VALUES_PRESSRELEASE = ["press", "release"]
     VALUES_TRIGGERED_EVENTS = [
@@ -111,29 +108,28 @@ class RaspiGPIOMPDClient:
             self.config = configparser.ConfigParser()
             self.config.read(self.CONFIGFILE)
 
-            self.setLogLevel()
-
             return True
         except Exception:
             self._log.error(f"Accessing config file '{self.CONFIGFILE}' failed!")
             return False
 
+    def checkConfig(self):
+        """Return True if the configuration has mandatory section GPIO."""
+        return self.config.has_section("GPIO")
+
     def setLogLevel(self):
-        """Set the log level from configuration to DEBUG."""
-        configLog = self.config["Log"]
-        if (
-            configLog
-            and "level" in configLog
-            and (configLog["level"].tolower() == "debug" or
-                 int(configLog["level"]) == 1)
-        ):
-            self._log.info("Switch log level to DEBUG.")
-            self._log.setLevel(logging.DEBUG)
+        """Set the log level by configuration to DEBUG."""
+        if self.config.has_option("Log", "level"):
+            configLog = self.config["Log"]
+            if configLog["level"].lower() == "debug" or int(configLog["level"]) == 1:
+                self._log.info("Switch log level to DEBUG.")
+                self._log.setLevel(logging.DEBUG)
 
     def initMPD(self):
         """Initialize the connection to MPD server"""
         try:
-            configMPD = self.config["MPD"]
+            if self.config.has_section("MPD"):
+                configMPD = self.config["MPD"]
 
             if (
                 not configMPD
@@ -204,14 +200,8 @@ class RaspiGPIOMPDClient:
 
     def configButton(self, buttonConfig):
         """Configure one button"""
-        try:
-            pin = int(buttonConfig[0])
-
-            if pin in self._usedpins:
-                self._log.error(f"Pin {pin} already in use!")
-                return False
-        except Exception as e:
-            self._log.error(f"Invalid pin configuration! ({e})")
+        pin = self.getButtonPin(buttonConfig[0])
+        if pin == -1:
             return False
 
         pudMode = self.checkResistor(buttonConfig[1])
@@ -274,23 +264,8 @@ class RaspiGPIOMPDClient:
 
     def configRotEnc(self, rotencConfig):
         """Configure one rotary encoder"""
-        try:
-            pinA = int(rotencConfig[0])
-            pinB = int(rotencConfig[1])
-
-            if pinA == pinB:
-                self._log.error("Pins must be different for rotary encoder!")
-                return False
-
-            if pinA in self._usedpins:
-                self._log.error(f"Pin {pinA} already in use!")
-                return False
-
-            if pinB in self._usedpins:
-                self._log.error(f"Pin {pinB} already in use!")
-                return False
-        except Exception as e:
-            self._log.error(f"Invalid pin configuration! ({e})")
+        pinA, pinB = self.getRotEncPins(rotencConfig[0], rotencConfig[1])
+        if pinA == -1 or pinB == -1:
             return False
 
         pudMode = self.checkResistor(rotencConfig[2])
@@ -359,6 +334,47 @@ class RaspiGPIOMPDClient:
                 f"Error while setting up GPIO input for rotary encoder! ({e})"
             )
             return False
+
+    def getButtonPin(self, pinStr):
+        """Return the BCM pin number of a button if this was not used before.
+
+        Otherwise return -1."""
+        try:
+            pin = int(pinStr)
+
+            if pin in self._usedpins:
+                self._log.error(f"Pin {pin} already in use!")
+                return -1
+
+            return pin
+        except Exception as e:
+            self._log.error(f"Invalid pin configuration! ({e})")
+            return -1
+
+    def getRotEncPins(self, pinAStr, pinBStr):
+        """Return the BCM pin numbers of a rotary encoder if these were not used before.
+
+        Otherwise return -1 for the wrong pin."""
+        try:
+            pinA = int(pinAStr)
+            pinB = int(pinBStr)
+
+            if pinA == pinB:
+                self._log.error("Pins must be different for rotary encoder!")
+                return -1, -1
+
+            if pinA in self._usedpins:
+                self._log.error(f"Pin {pinA} already in use!")
+                return -1, 0
+
+            if pinB in self._usedpins:
+                self._log.error(f"Pin {pinB} already in use!")
+                return 0, -1
+
+            return pinA, pinB
+        except Exception as e:
+            self._log.error(f"Invalid pin configuration! ({e})")
+            return -1, -1
 
     def checkResistor(self, pudStr):
         """Return index if string is found in pre-defined values for pull resistor types"""
@@ -508,9 +524,11 @@ def main():
         if not mpdclient.readConfigFile():
             sys.exit(-2)
 
-        if not mpdclient.config["GPIO"]:
+        if not mpdclient.checkConfig():
             log.error("Invalid configuration file! (section [GPIO] missing)")
             sys.exit(-3)
+
+        mpdclient.setLogLevel()
 
         if not mpdclient.initGPIO():
             log.error("Init GPIO failed!")
