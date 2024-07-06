@@ -1,7 +1,0 @@
-#!/bin/bash
-
-echo "Restarting raspi-gpio-mpdc service..."
-sudo systemctl restart raspi-gpio-mpdc
-systemctl status raspi-gpio-mpdc
-echo "Done."
-

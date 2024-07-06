@@ -17,72 +17,29 @@ Required packages
 
 Installation
 ------------
-Automated installation is not yet supported. Follow the manual steps below instead.
+Download raspi-gpio-mpdc via **Code** button or from `Releases <https://github.com/mikiair/raspi-gpio-mpdc/releases>`_ page (you most likely did already).
+Unzip the received file:
 
-1. Install pigpio (or any other of the supported `pin-factories <https://gpiozero.readthedocs.io/en/stable/api_pins.html#changing-the-pin-factory>`_):
+   ``unzip raspi-gpio-mpdc-main.zip -d ~/raspi-gpio-mpdc``
 
-   | ``sudo apt update``
-   | ``sudo apt install python3-pigpio``
-  
-#. Install GPIO Zero (if not included as a default in your OS distribution)
-   
-   ``sudo apt install python3-gpiozero``
-   
-#. Install python-systemd package
+Configure the service by editing the file ``raspi-gpio-mpdc.conf`` according to your external hardware circuit set-up (see Configuration_).
+Then simply run the script ``install`` in the **script** sub-folder. It will download and install the required packages, 
+copy the files to their destinations, will register the service, and finally start it.
 
-   ``sudo apt install python3-systemd``
+If you need to change the configuration after installation, you might use the script ``reconfigure`` after editing the source configuration file.
+This will stop the service, copy the changed configuration file to **/etc** folder (overwrites previous version!), and then start the service again.
 
-#. Install python3-mpd package
+If you downloaded a newer version of the service the script ``update`` will handle stop and start of the service, and will copy the new Python and service files.
+However, this will not update any underlying packages or services.
 
-   - Debian Bullseye
-
-   ``sudo apt install python3-mpd``
-
-   - Other
-   
-   ``pip install python-mpd2``   
-
-#. If not already included, add the *pi* user to the *gpio* group (check with ``groups pi`` command)
-
-   ``sudo usermod -a -G gpio mopidy``
-   
-#. Download raspi-gpio-mpdc **Code** or from `Releases <https://github.com/mikiair/raspi-gpio-mpdc/releases>`_ 
-   page (you most likely did this already).
-
-#. Unzip the received file:
-
-   ``unzip raspi-gpio-mpdc-v....zip -d ~/raspi-gpio-mpdc``
-
-#. Configure the service according to your external circuit set-up and personal needs (see Configuration_).
-
-#. Copy the two configuration files to **/etc** folder
-
-   | ``sudo cp ~/raspi-gpio-mpdc/gpiozero_pin_factory.conf /etc``
-   | ``sudo cp ~/raspi-gpio-mpdc/raspi-gpio-mpdc.conf /etc``
-   
-   The first one is an environment file for the service and defines the default pin-factory for GPIO Zero. 
-   The second one holds the actual configuration for the MPD client service.
-
-#. Copy the Python file to **/usr/local/bin** folder
-
-   ``sudo cp ~/raspi-gpio-mpdc/raspi-gpio-mpdc.py /usr/local/bin``
-
-#. Copy the service file to **/lib/systemd/system** folder
-
-   ``sudo cp ~/raspi-gpio-mpdc/raspi-gpio-mpdc.service /lib/systemd/system``
-
-#. Enable the service to persist after reboot
-
-   ``sudo systemctl enable raspi-gpio-mpdc``
-   
-#. Reboot   
+For uninstall, use the provided script ``uninstall``.
 
 Configuration
 -------------
-
-The configuration is defined in the file ``raspi-gpio-mpdc.conf`` which must be placed in **/etc** folder. 
-It requires a section ``[GPIO]`` with one or more, but unique keys of the pattern ``ButtonN`` or ``RotEncN`` 
-where N is replaced by an integer number.
+The configuration is defined in the file ``raspi-gpio-mpdc.conf``. Before installation, you will find the source file in the folder where you unzipped the package files. 
+After installation, the active version is in **/etc** folder.
+It requires a section ``[GPIO]`` with one or more, but unique keys of the pattern ``ButtonN`` or ``RotEncN`` where N is replaced by an integer number. 
+All pin numbers must be given in BCM format, not physical pin numbering!
 
 1) The ``ButtonN`` key-value-pairs must be created based on this pattern:
 

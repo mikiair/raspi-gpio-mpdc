@@ -1,0 +1,33 @@
+#!/bin/bash
+
+set -e
+
+cd "$(dirname "$0")/.."
+
+echo "Updating raspi-gpio-mpdc service..."
+
+if [ -e /etc/raspi-gpio-mpdc.conf ]
+  then
+    read -p "Overwrite existing configuration file '/etc/raspi-gpio-mpdc.conf' (y/N)?" ov
+  else
+    ov="y"
+fi
+
+if [ "$ov" == "y" -o "$ov" == "Y" ]
+  then
+    sudo cp raspi-gpio-mpdc.conf /etc
+fi
+
+echo "Updating service script '/usr/local/bin/raspi-gpio-mpdc.py' (temporarily stopping service)"
+sudo systemctl stop raspi-gpio-mpdc
+
+sudo cp -u raspi-gpio-mpdc.py /usr/local/bin/
+sudo chmod +x /usr/local/bin/raspi-gpio-mpdc.py
+
+sudo cp -u raspi-gpio-mpdc.service /lib/systemd/system
+
+echo "Restarting raspi-gpio-mpdc service..."
+sudo systemctl start raspi-gpio-mpdc
+systemctl status raspi-gpio-mpdc
+
+echo "raspi-gpio-mpdc service updated."

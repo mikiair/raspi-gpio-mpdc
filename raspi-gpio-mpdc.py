@@ -3,8 +3,8 @@
 __author__ = "Michael Heise"
 __copyright__ = "Copyright (C) 2022-2024 by Michael Heise"
 __license__ = "Apache License Version 2.0"
-__version__ = "0.0.4"
-__date__ = "06/30/2024"
+__version__ = "1.0.0"
+__date__ = "07/06/2024"
 
 """MPD/Mopidy client which is controlled by GPIO Zero on Raspberry Pi
 """
@@ -27,128 +27,23 @@ __date__ = "06/30/2024"
 import configparser
 import logging
 import signal
-import socket
 import sys
 import time
 import weakref
 
 # 3rd party imports
 import gpiozero
-import mpd
 from systemd.journal import JournalHandler
 
 # local imports
-# - none -
-
-
-class PersistentMPDClient(mpd.MPDClient):
-    def __init__(self, socket=None, host=None, port=None, log=None):
-        super(PersistentMPDClient, self).__init__()
-        self.socket = socket
-        self.host = host
-        self.port = port
-        self.log = log
-
-        self.command_blacklist = ["ping"]
-
-        self.connection_established = False
-        self.establish_connection()
-
-    def establish_connection(self):
-        """Establish the connection to the MPD server by trying to connect,
-        and if not yet connected before (= not established),
-        then read out the command list and dereference to auto-connect commands
-        """
-        try:
-            if self.log is not None:
-                self.log.debug("establish_connection")
-
-            if not self.do_connect(False):
-                return
-
-            if not self.connection_established:
-                self.establish_commandlist()
-        except Exception as e:
-            if self.log is not None:
-                self.log.error(f"Error when establishing connection to MPD server: {e}")
-
-    def establish_commandlist(self):
-        """Wrap all valid MPDClient functions so that each may reconnect to server."""
-        # get list of available commands from client
-        command_list = self.commands()
-
-        # wrap all valid MPDClient functions
-        # in a ping-connection-retry wrapper
-        for cmd in command_list:
-            if cmd not in self.command_blacklist:
-                if hasattr(super(PersistentMPDClient, self), cmd):
-                    super_func = super(PersistentMPDClient, self).__getattribute__(cmd)
-                    new_func = self.try_cmd(super_func)
-                    setattr(self, cmd, new_func)
-                else:
-                    if self.log is not None:
-                        self.log.debug("Unknown command attribute '{cmd}'!")
-                    pass
-
-        self.connection_established = True
-
-    # create a wrapper for a function (such as an MPDClient
-    # member function) that will verify a connection (and
-    # reconnect if necessary) before executing that function.
-    # functions wrapped in this way should always succeed
-    # (if the server is up)
-    # we ping first because we don't want to retry the same
-    # function if there's a failure, we want to use the noop
-    # to check connectivity
-
-    def try_cmd(self, cmd_func):
-        """Wrapper function which pings the MPD server and
-        in case of failure tries to re-connect before carrying out the actual command.
-        """
-
-        def func(*pargs, **kwargs):
-            try:
-                self.ping()
-            except (mpd.ConnectionError, OSError):
-                self.do_connect()
-            return cmd_func(*pargs, **kwargs)
-
-        return func
-
-    # needs a name that does not collide with parent connect() function
-    def do_connect(self, log_exception=True):
-        try:
-            try:
-                # Attempting to disconnect
-                self.disconnect()
-            # if it's a TCP connection, we'll get a socket error
-            # if we try to disconnect when the connection is lost
-            except mpd.ConnectionError:
-                pass
-            # if it's a socket connection, we'll get a BrokenPipeError
-            # if we try to disconnect when the connection is lost
-            # but we have to retry the disconnect, because we'll get
-            # an "Already connected" error if we don't.
-            # the second one should succeed.
-            except BrokenPipeError:
-                try:
-                    self.disconnect()
-                except Exception:
-                    pass
-
-            if self.socket:
-                self.connect(self.socket, None)
-            else:
-                self.connect(self.host, self.port)
-            return True
-        except socket.error:
-            if self.log is not None and log_exception:
-                self.log.error("MPD Server: connection refused!")
-            return False
+from persistentmpdc import PersistentMPDClient
 
 
 class RaspiGPIOMPDClient:
     CONFIGFILE = "/etc/raspi-gpio-mpdc.conf"
+
+    LOGLEVEL_INFO = 0
+    LOGLEVEL_DEBUG = 1
 
     VALUES_PULLUPDN = ["up", "dn", "upex", "dnex"]
     VALUES_PRESSRELEASE = ["press", "release"]
@@ -176,14 +71,13 @@ class RaspiGPIOMPDClient:
         self._finalizer = weakref.finalize(self, self.finalize)
         self._buttons = []
         self._rotencs = []
+        self._usedpins = []
 
         self.isValidGPIO = False
         self.isConnected = False
 
         self.config = None
         self.mpd = None
-
-        self.btn_held = {}
 
     def remove(self):
         self._finalizer()
@@ -203,7 +97,7 @@ class RaspiGPIOMPDClient:
         logHandler.setFormatter(log_fmt)
         log.addHandler(logHandler)
         log.setLevel(logging.INFO)
-        #log.setLevel(logging.DEBUG)
+        # log.setLevel(logging.DEBUG)
         self._log = log
         self._log.info("Initialized logging.")
 
@@ -216,10 +110,25 @@ class RaspiGPIOMPDClient:
             self._log.info(f"Reading configuration file... '{self.CONFIGFILE}'")
             self.config = configparser.ConfigParser()
             self.config.read(self.CONFIGFILE)
+
+            self.setLogLevel()
+
             return True
         except Exception:
             self._log.error(f"Accessing config file '{self.CONFIGFILE}' failed!")
             return False
+
+    def setLogLevel(self):
+        """Set the log level from configuration to DEBUG."""
+        configLog = self.config["Log"]
+        if (
+            configLog
+            and "level" in configLog
+            and (configLog["level"].tolower() == "debug" or
+                 int(configLog["level"]) == 1)
+        ):
+            self._log.info("Switch log level to DEBUG.")
+            self._log.setLevel(logging.DEBUG)
 
     def initMPD(self):
         """Initialize the connection to MPD server"""
@@ -295,6 +204,16 @@ class RaspiGPIOMPDClient:
 
     def configButton(self, buttonConfig):
         """Configure one button"""
+        try:
+            pin = int(buttonConfig[0])
+
+            if pin in self._usedpins:
+                self._log.error(f"Pin {pin} already in use!")
+                return False
+        except Exception as e:
+            self._log.error(f"Invalid pin configuration! ({e})")
+            return False
+
         pudMode = self.checkResistor(buttonConfig[1])
         if pudMode == -1:
             return False
@@ -324,19 +243,18 @@ class RaspiGPIOMPDClient:
         else:
             bouncetime = 50
 
-        return self.setupButton(
-            buttonConfig[0], pud, active, event, triggered_event, bouncetime
-        )
+        return self.setupButton(pin, pud, active, event, triggered_event, bouncetime)
 
     def setupButton(self, pin, pull, active, event, triggered_event, bouncetime):
         """Setup GPIOZero object for button"""
         try:
             button = gpiozero.Button(
-                int(pin),
+                pin,
                 pull_up=pull,
                 active_state=active,
                 bounce_time=0.001 * bouncetime,
             )
+            self._usedpins.append(pin)
 
             event_func = getattr(self, triggered_event)
 
@@ -356,6 +274,25 @@ class RaspiGPIOMPDClient:
 
     def configRotEnc(self, rotencConfig):
         """Configure one rotary encoder"""
+        try:
+            pinA = int(rotencConfig[0])
+            pinB = int(rotencConfig[1])
+
+            if pinA == pinB:
+                self._log.error("Pins must be different for rotary encoder!")
+                return False
+
+            if pinA in self._usedpins:
+                self._log.error(f"Pin {pinA} already in use!")
+                return False
+
+            if pinB in self._usedpins:
+                self._log.error(f"Pin {pinB} already in use!")
+                return False
+        except Exception as e:
+            self._log.error(f"Invalid pin configuration! ({e})")
+            return False
+
         pudMode = self.checkResistor(rotencConfig[2])
         if pudMode == -1:
             return False
@@ -384,8 +321,8 @@ class RaspiGPIOMPDClient:
             bouncetime = 20
 
         return self.setupRotEnc(
-            rotencConfig[0],
-            rotencConfig[1],
+            pinA,
+            pinB,
             pud,
             triggered_event_ccw,
             triggered_event_cw,
@@ -398,8 +335,11 @@ class RaspiGPIOMPDClient:
         """Setup GPIOZero rotary encoder object"""
         try:
             rotenc = gpiozero.RotaryEncoder(
-                int(pinA), int(pinB), bounce_time=0.001 * bouncetime, max_steps=50
+                pinA, pinB, bounce_time=0.001 * bouncetime, max_steps=50
             )
+
+            self._usedpins.append(pinA)
+            self._usedpins.append(pinB)
 
             event_func_ccw = getattr(self, triggered_ccw_event)
             if not event_func_ccw:

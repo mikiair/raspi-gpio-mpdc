@@ -7,7 +7,7 @@ set -e
 cd "$(dirname "$0")/.."
 
 sudo systemctl stop raspi-gpio-mpdc
-sudo cp raspi-gpio-mpdc.conf /etc
+sudo cp -u raspi-gpio-mpdc.conf /etc
 sudo systemctl start raspi-gpio-mpdc
 systemctl status raspi-gpio-mpdc
 
