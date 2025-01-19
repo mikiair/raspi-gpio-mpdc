@@ -409,7 +409,7 @@ class RaspiGPIOMPDClient:
         return True
 
     def initGPIO(self):
-        """evaluate the data read from config file to set the GPIO inputs"""
+        """Evaluate the data read from config file to set the GPIO inputs"""
         self._log.info("Init GPIO configuration.")
         configGPIO = self.config["GPIO"]
 
@@ -504,7 +504,7 @@ class RaspiGPIOMPDClient:
 
 
 def sigterm_handler(_signo, _stack_frame):
-    """clean exit on SIGTERM signal (when systemd stops the process)"""
+    """Clean exit on SIGTERM signal (when systemd stops the process)"""
     sys.exit(0)
 
 

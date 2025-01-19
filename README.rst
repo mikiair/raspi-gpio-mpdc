@@ -1,3 +1,4 @@
+===============
 raspi-gpio-mpdc
 ===============
 This is a configurable Python service to run on `Raspberry Pi <https://www.raspberrypi.org>`_.
@@ -38,15 +39,17 @@ Configuration
 -------------
 The configuration is defined in the file ``raspi-gpio-mpdc.conf``. Before installation, you will find the source file in the folder where you unzipped the package files. 
 After installation, the active version is in **/etc** folder.
-It requires a section ``[GPIO]`` with one or more, but unique keys of the pattern ``ButtonN`` or ``RotEncN`` where N is replaced by an integer number. 
-All pin numbers must be given in BCM format, not physical pin numbering!
+
+Section [GPIO]
+==============
+Section ``[GPIO]`` is mandatory. It requires one or more, but unique keys of the pattern ``ButtonN`` or ``RotEncN`` where N is replaced by integer numbers. 
 
 1) The ``ButtonN`` key-value-pairs must be created based on this pattern:
 
    ``ButtonN = input_pin_number,up|dn|upex|dnex,press|release,trigger_event[,bouncetime_ms]``
 
    ``input_pin_number``
-     The GPIO pin in BCM format to which a button is connected.
+     The GPIO pin in BCM format to which a button is connected. If this GPIO pin is already in use by this or another application you will get an error and the service will not start.
    ``up|dn|upex|dnex``
      Selects the pull-up or pull-down resistor for the pin which can use Raspi internal ones, or *external* resistor provided by your circuit.
    ``press|release``
@@ -78,7 +81,8 @@ All pin numbers must be given in BCM format, not physical pin numbering!
    ``RotEncN = input_pin_A,input_pin_B,up|dn|upex|dnex,rot_ccw_event,rot_cw_event[,bouncetime_ms]``
 
    ``input_pin_A,input_pin_B``
-     The pair of GPIO pins to which a rotary encoder is connected. The sequence of high-low-high transitions determines the rotation direction. (Remaining pins are usually connected to *VCC*, *GND*, and an optional button switch.)
+     The pair of GPIO pins to which a rotary encoder is connected. The sequence of high-low-high transitions determines the rotation direction. (Remaining physical pins are usually connected to *GND* and a button switch.)
+     If one or both of these GPIO pins are already in use by this or another application you will get an error and the service will not start.
    ``up|dn|upex|dnex``
      Selects the type of pull resistors for the two pins which can use Raspi internal ones, or *external* resistors provided by your circuit or module.
    ``rot_ccw_event``
@@ -93,3 +97,28 @@ All pin numbers must be given in BCM format, not physical pin numbering!
    ``RotEnc0 = 18,19,upex,vol_dn,vol_up``
    
    configures pins GPIO18 and GPIO19 expecting a pair of external pull-up resistors, to act as inputs from a rotary encoder which turns volume down and up, respectively.
+
+Section [MPD]
+=============
+This is an optional section.
+
+1) Optionally specify the MPD server to connect to. Default is ``localhost``.
+
+   ``mpdhost = servername``
+   
+   ``servername``
+     Name of the MPD server to connect to or its local IP address.
+     
+#) Optionally specify the port the MPD server uses. Default is 6600.
+
+   ``mpdport = portnumber``
+   
+   ``portnumber``
+     The port number which is used by the MPD server for connection.
+   
+#) Optionally specify a timeout in seconds to wait for connection built up. Default is 60 seconds.
+
+   ``timeout = timeout_in_seconds``
+   
+   ``timeout_in_seconds``
+     Time to wait for establishing the connection to the MPD server in seconds.
