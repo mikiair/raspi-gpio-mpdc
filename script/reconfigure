@@ -9,8 +9,10 @@ cd "$(dirname "$0")/.."
 sudo systemctl stop raspi-gpio-mpdc
 sudo cp -u raspi-gpio-mpdc.conf /etc
 sudo systemctl start raspi-gpio-mpdc
-sleep 3
-systemctl status raspi-gpio-mpdc
+
+echo "Waiting for service to restart..."
+sleep 5
+systemctl status raspi-gpio-mpdc --no-pager -n 5
 
 echo "Done."
 
