@@ -1,15 +1,15 @@
 #!/usr/bin/env python
 
 __author__ = "Michael Heise"
-__copyright__ = "Copyright (C) 2022-2024 by Michael Heise"
+__copyright__ = "Copyright (C) 2022-2025 by Michael Heise"
 __license__ = "Apache License Version 2.0"
-__version__ = "1.0.0"
-__date__ = "07/06/2024"
+__version__ = "1.0.1"
+__date__ = "06/14/2025"
 
 """MPD/Mopidy client which is controlled by GPIO Zero on Raspberry Pi
 """
 
-#    Copyright 2022-2024 Michael Heise (mikiair)
+#    Copyright 2022-2025 Michael Heise (mikiair)
 #
 #    Licensed under the Apache License, Version 2.0 (the "License");
 #    you may not use this file except in compliance with the License.
@@ -24,38 +24,21 @@ __date__ = "07/06/2024"
 #    limitations under the License.
 
 # standard imports
-import configparser
 import logging
 import signal
 import sys
 import time
-import weakref
 
 # 3rd party imports
 import gpiozero
-from systemd.journal import JournalHandler
 
 # local imports
-from persistentmpdc import PersistentMPDClient
+from raspimpdc import RaspiBaseMPDClient
 
 
-class RaspiGPIOMPDClient:
-    CONFIGFILE = "/etc/raspi-gpio-mpdc.conf"
-
+class RaspiGPIOMPDClient(RaspiBaseMPDClient):
     VALUES_PULLUPDN = ["up", "dn", "upex", "dnex"]
     VALUES_PRESSRELEASE = ["press", "release"]
-    VALUES_TRIGGERED_EVENTS = [
-        "none",
-        "play_stop",
-        "play_pause",
-        "prev_track",
-        "next_track",
-        "mute",
-        "vol_dn",
-        "vol_up",
-        "prev_src",
-        "next_src",
-    ]
 
     PUD_SWITCHER = {
         0: (True, None),
@@ -65,138 +48,24 @@ class RaspiGPIOMPDClient:
     }
 
     def __init__(self):
-        self._finalizer = weakref.finalize(self, self.finalize)
+        super().__init__()
+
         self._buttons = []
         self._rotencs = []
         self._usedpins = []
 
         self.isValidGPIO = False
-        self.isConnected = False
 
-        self.config = None
-        self.mpd = None
-
-    def remove(self):
-        self._finalizer()
-
-    @property
-    def removed(self):
-        return not self._finalizer.alive
-
-    def finalize(self):
-        if self.mpd is not None:
-            self.mpd.disconnect()
-
-    def initLogging(self, log):
+    def initLogging(self, log=None):
         """Initialize logging to journal"""
-        log_fmt = logging.Formatter("%(levelname)s %(message)s")
-        logHandler = JournalHandler()
-        logHandler.setFormatter(log_fmt)
-        log.addHandler(logHandler)
-        log.setLevel(logging.INFO)
-        # log.setLevel(logging.DEBUG)
-        self._log = log
-        self._log.info("Initialized logging.")
+        super().initLogging(log)
 
         pinf = type(gpiozero.Device._default_pin_factory()).__name__
         self._log.info(f"GPIO Zero default pin factory: {pinf}")
 
-    def readConfigFile(self):
-        """Read the config file"""
-        try:
-            self._log.info(f"Reading configuration file... '{self.CONFIGFILE}'")
-            self.config = configparser.ConfigParser()
-            self.config.read(self.CONFIGFILE)
-
-            return True
-        except Exception:
-            self._log.error(f"Accessing config file '{self.CONFIGFILE}' failed!")
-            return False
-
     def checkConfig(self):
         """Return True if the configuration has mandatory section GPIO."""
         return self.config.has_section("GPIO")
-
-    def setLogLevel(self):
-        """Set the log level by configuration to DEBUG."""
-        if self.config.has_option("Log", "level"):
-            configLog = self.config["Log"]
-            if configLog["level"].lower() == "debug" or int(configLog["level"]) == 1:
-                self._log.info("Switch log level to DEBUG.")
-                self._log.setLevel(logging.DEBUG)
-
-    def initMPD(self):
-        """Initialize the connection to MPD server"""
-        try:
-            if self.config.has_section("MPD"):
-                configMPD = self.config["MPD"]
-
-            if (
-                not configMPD
-                or "mpdhost" not in configMPD
-                or configMPD["mpdhost"] == ""
-            ):
-                host = "localhost"
-            else:
-                host = configMPD["mpdhost"]
-
-            if (
-                not configMPD
-                or "mpdport" not in configMPD
-                or configMPD["mpdport"] == ""
-            ):
-                port = 6600
-            else:
-                port = int(configMPD["mpdport"])
-
-            if (
-                not configMPD
-                or "timeout" not in configMPD
-                or configMPD["timeout"] == ""
-            ):
-                self.mpd_conn_timeout = 60
-            else:
-                self.mpd_conn_timeout = int(configMPD["timeout"])
-
-            self._log.info(f"Initialize connection to MPD server: {host}:{port}")
-
-            # this will initially try to establish connection already
-            self.mpd = PersistentMPDClient(host=host, port=port, log=self._log)
-
-            self.isConnected = self.mpd.connection_established
-
-            if self.isConnected:
-                self._log.debug(self.mpd.status())
-
-            return True
-        except Exception as e:
-            self._log.error(f"Connection to MPD failed! ({e})")
-            return False
-
-    def connectMPD(self):
-        """Try connecting to MPD server until timeout (configurable),
-        to establish auto-reconnect commands.
-        """
-        if not self.mpd:
-            return False
-
-        self._log.info(
-            "Wait until MPD server started and try establishing connection..."
-        )
-        num_tried = 0
-        while (not self.isConnected) and (num_tried < self.mpd_conn_timeout):
-            try:
-                self.mpd.establish_connection()
-                self.isConnected = self.mpd.connection_established
-                if self.isConnected:
-                    self._log.debug(self.mpd.status())
-                    return True
-            except Exception:
-                pass
-            num_tried += 1
-            time.sleep(1)
-
-        return False
 
     def configButton(self, buttonConfig):
         """Configure one button"""
@@ -397,17 +266,6 @@ class RaspiGPIOMPDClient:
             return False
         return True
 
-    def checkTriggeredEvent(self, triggeredEvent):
-        """Return true if string..."""
-        if triggeredEvent not in self.VALUES_TRIGGERED_EVENTS:
-            self._log.error(
-                "Invalid event! Only one of {0} allowed!".format(
-                    "/".join(self.VALUES_TRIGGERED_EVENTS)
-                )
-            )
-            return False
-        return True
-
     def initGPIO(self):
         """Evaluate the data read from config file to set the GPIO inputs"""
         self._log.info("Init GPIO configuration.")
@@ -434,74 +292,6 @@ class RaspiGPIOMPDClient:
         self.isValidGPIO = True
         return True
 
-    # trigger event handlers
-
-    def play_pause(self):
-        self._log.debug("play_pause: ")
-        prev_state = self.mpd.status()["state"]
-        if prev_state == "play":
-            self.mpd.pause()
-        else:
-            self.mpd.play()
-        self._log.debug(prev_state + "->" + self.mpd.status()["state"])
-
-    def play_stop(self):
-        self._log.debug("play_stop: ")
-        prev_state = self.mpd.status()["state"]
-        if prev_state == "play":
-            self.mpd.stop()
-        else:
-            self.mpd.play()
-        self._log.debug(prev_state + "->" + self.mpd.status()["state"])
-
-    def prev_track(self):
-        self._log.debug("prev_track")
-        self.mpd.previous()
-        self._log.debug(self.mpd.status())
-
-    def next_track(self):
-        self._log.debug("next_track")
-        self.mpd.next()
-        self._log.debug(self.mpd.status())
-
-    def mute(self):
-        self._log.debug("mute")
-        self.mpd.toggleoutput(0)
-        self._log.debug(self.mpd.status())
-
-    def vol_dn(self):
-        self._log.debug("vol_dn")
-        prev_vol = int(self.mpd.status()["volume"])
-        if prev_vol > 0:
-            if prev_vol > self._vol_step:
-                self.mpd.volume(-self._vol_step)
-            else:
-                self.mpd.volume(0)
-            self._log.debug(str(prev_vol) + "->" + str(self.mpd.status()["volume"]))
-        else:
-            self._log.debug(str(prev_vol))
-
-    def vol_up(self):
-        self._log.debug("vol_up")
-        prev_vol = int(self.mpd.status()["volume"])
-        if prev_vol < 100:
-            if prev_vol + self._vol_step < 100:
-                self.mpd.volume(+self._vol_step)
-            else:
-                self.mpd.volume(100)
-            self._log.debug(str(prev_vol) + "->" + str(self.mpd.status()["volume"]))
-        else:
-            self._log.debug(str(prev_vol))
-
-    def prev_src(self):
-        # .listplaylists()
-        # .load(name)
-        # .list("file")
-        pass
-
-    def next_src(self):
-        pass
-
 
 def sigterm_handler(_signo, _stack_frame):
     """Clean exit on SIGTERM signal (when systemd stops the process)"""
@@ -519,7 +309,8 @@ def main():
         log = logging.getLogger(__name__)
 
         mpdclient = RaspiGPIOMPDClient()
-        mpdclient.initLogging(log)
+        if log:
+            mpdclient.initLogging(log)
 
         if not mpdclient.readConfigFile():
             sys.exit(-2)

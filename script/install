@@ -45,6 +45,8 @@ fi
 
 sudo cp raspi-gpio-mpdc.py /usr/local/bin/
 sudo chmod +x /usr/local/bin/raspi-gpio-mpdc.py
+sudo cp raspimpdc.py /usr/local/bin/
+sudo chmod +x /usr/local/bin/raspimpdc.py
 sudo cp persistentmpdc.py /usr/local/bin/
 sudo chmod +x /usr/local/bin/persistentmpdc.py
 

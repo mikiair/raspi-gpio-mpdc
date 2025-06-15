@@ -23,6 +23,10 @@ sudo systemctl stop raspi-gpio-mpdc
 
 sudo cp -u raspi-gpio-mpdc.py /usr/local/bin/
 sudo chmod +x /usr/local/bin/raspi-gpio-mpdc.py
+sudo cp -u raspimpdc.py /usr/local/bin/
+sudo chmod +x /usr/local/bin/raspimpdc.py
+sudo cp -u persistentmpdc.py /usr/local/bin/
+sudo chmod +x /usr/local/bin/persistentmpdc.py
 
 sudo cp -u raspi-gpio-mpdc.service /lib/systemd/system
 
