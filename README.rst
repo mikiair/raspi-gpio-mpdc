@@ -13,8 +13,9 @@ Required packages
 * `Mopidy <https://mopidy.com/>`_ with `Mopidy-MPD <https://mopidy.com/ext/mpd>`_ extension (or another MPD server)
 * pigpiod (or any other supported pin factory library)
 * GPIO Zero
-* python3-systemd
-* python3-mpd / python-mpd2
+* `python3-systemd <https://github.com/systemd/python-systemd>`_
+* python3-mpd / `python-mpd2 <https://github.com/Mic92/python-mpd2>`_
+* `raspi-mpdc <https://github.com/mikiair/raspi-mpdc>`_
 
 Installation
 ------------
